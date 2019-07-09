@@ -4,10 +4,13 @@ import sys
 import cv2
 from chalice import Chalice, Response
 from hyperlpr import HyperLPR_PlateRecogntion
-from werkzeug.utils import secure_filename
-from urllib.parse import parse_qs
+
+from chalice import Chalice, Response
+import boto3
 
 app = Chalice(app_name='lpr_demo')
+BUCKET = 'wechat-qr'  # bucket name
+s3_client = boto3.client('s3')
 
 
 @app.route('/')
@@ -54,3 +57,23 @@ def lpr(file_name):
     else:
         return Response('error happens')
 
+
+@app.route('/upload/{file_name}', methods=['PUT'],
+           content_types=['application/octet-stream'])
+def upload_to_s3(file_name):
+    # get raw body of PUT request
+    body = app.current_request.raw_body
+
+    # write body to tmp file
+    tmp_file_name = '/tmp/' + file_name
+    with open(tmp_file_name, 'wb') as tmp_file:
+        tmp_file.write(body)
+
+    # upload tmp file to s3 bucket
+    s3_client.upload_file(tmp_file_name, BUCKET, file_name)
+
+    return Response(body='upload successful: {}'.format(file_name),
+                    status_code=200,
+                    headers={'Content-Type': 'text/plain'})
+
+# curl -X PUT https://YOUR_API_URL_HERE/upload/mypic.jpg --upload-file mypic.jpg --header "Content-Type:application/octet-stream"
