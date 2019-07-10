@@ -2,7 +2,6 @@ import os
 import sys
 
 import cv2
-from chalice import Chalice, Response
 from hyperlpr import HyperLPR_PlateRecogntion
 
 from chalice import Chalice, Response
@@ -41,7 +40,8 @@ def index():
 def lpr(file_name):
     body = app.current_request.raw_body
     # parsed = parse_qs(request.raw_body, encoding='utf-8')
-    temp_file = '/tmp/' + file_name
+
+    temp_file = os.getcwd() + file_name
     with open(temp_file, 'wb') as f:
         f.write(body)
 
@@ -65,15 +65,28 @@ def upload_to_s3(file_name):
     body = app.current_request.raw_body
 
     # write body to tmp file
-    tmp_file_name = '/tmp/' + file_name
+    tmp_file_name = os.getcwd() + file_name
     with open(tmp_file_name, 'wb') as tmp_file:
         tmp_file.write(body)
 
+    # 使用Opencv转换一下图片格式和名称
+    img = cv2.imread(tmp_file_name)
+    # 识别结果
+    data = HyperLPR_PlateRecogntion(img)
+    if data:
+        for i in data:
+            if i[1] > 0.8:
+                os.remove(tmp_file_name)
+                return Response(body='lpr: {}'.format(i[0]),
+                                status_code=200,
+                                headers={'Content-Type': 'text/plain'})
+    else:
+        return Response(body='error: {}'.format('error happens'),
+                                status_code=400,
+                                headers={'Content-Type': 'text/plain'})
     # upload tmp file to s3 bucket
-    s3_client.upload_file(tmp_file_name, BUCKET, file_name)
+    # s3_client.upload_file(tmp_file_name, BUCKET, file_name)
 
-    return Response(body='upload successful: {}'.format(file_name),
-                    status_code=200,
-                    headers={'Content-Type': 'text/plain'})
+# chalice local --port=8080
 
-# curl -X PUT https://YOUR_API_URL_HERE/upload/mypic.jpg --upload-file mypic.jpg --header "Content-Type:application/octet-stream"
+# curl -X PUT https://http://127.0.0.1:8080/upload/01.jpg --upload-file 01.jpg --header "Content-Type:application/octet-stream"
